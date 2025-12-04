@@ -1,24 +1,18 @@
-# Build outputs - ignore DEBs by default
-out/armv6/*.deb
-out/armhf/*.deb
-out/arm64/*.deb
-out/amd64/*.deb
-
-# Keep output directories
-!out/armv6/.gitkeep
-!out/armhf/.gitkeep
-!out/arm64/.gitkeep
-!out/amd64/.gitkeep
+# Temporary build directories
+build/
+out/**/*.deb
+out/**/*.buildinfo
+out/**/*.changes
+*.o
+*.a
+*.so
+*.so.*
 
 # Keep built DEBs for distribution
 !out/armv6/libfn-lgpio*.deb
 !out/armhf/libfn-lgpio*.deb
 !out/arm64/libfn-lgpio*.deb
 !out/amd64/libfn-lgpio*.deb
-
-# Temporary build directories
-build/
-
 # Editor files
 *.swp
 *.swo

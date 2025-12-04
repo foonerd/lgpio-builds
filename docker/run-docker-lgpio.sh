@@ -1,157 +1,117 @@
 #!/bin/bash
-# lgpio-builds docker/run-docker-lgpio.sh
-# Core Docker build logic for lgpio library DEBs
-
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(dirname "$SCRIPT_DIR")"
-
-cd "$REPO_DIR"
-
 VERBOSE=0
+if [[ "$4" == "--verbose" ]]; then
+  VERBOSE=1
+fi
 
-# Parse arguments
-ARCH="$1"
-shift || true
+COMPONENT=$1
+ARCH=$2
+MODE=$3
 
-for arg in "$@"; do
-  if [[ "$arg" == "--verbose" ]]; then
-    VERBOSE=1
-  fi
-done
-
-# Show usage if missing required parameters
-if [ -z "$ARCH" ]; then
-  echo "Usage: $0 <arch> [--verbose]"
-  echo ""
-  echo "Arguments:"
-  echo "  arch: armv6, armhf, arm64, amd64"
-  echo "  --verbose: Show detailed build output"
-  echo ""
-  echo "Example:"
-  echo "  $0 arm64"
-  echo "  $0 armv6 --verbose"
+if [[ -z "$COMPONENT" || -z "$ARCH" ]]; then
+  echo "Usage: $0 <component> <arch> [volumio] [--verbose]"
+  echo "Example: $0 lgpio armhf"
+  echo "Example: $0 lgpio armhf volumio --verbose"
   exit 1
 fi
 
-# Platform mappings for Docker
-declare -A PLATFORM_MAP
-PLATFORM_MAP=(
+DOCKERFILE="docker/Dockerfile.lgpio.$ARCH"
+IMAGE_TAG="foonerd-lgpio-$ARCH"
+
+declare -A ARCH_FLAGS
+ARCH_FLAGS=(
   ["armv6"]="linux/arm/v7"
   ["armhf"]="linux/arm/v7"
   ["arm64"]="linux/arm64"
   ["amd64"]="linux/amd64"
 )
 
-# Library path mappings
-declare -A LIB_PATH_MAP
-LIB_PATH_MAP=(
-  ["armv6"]="/usr/lib/arm-linux-gnueabihf"
-  ["armhf"]="/usr/lib/arm-linux-gnueabihf"
-  ["arm64"]="/usr/lib/aarch64-linux-gnu"
-  ["amd64"]="/usr/lib/x86_64-linux-gnu"
-)
-
-# DEB architecture mappings
-declare -A DEB_ARCH_MAP
-DEB_ARCH_MAP=(
-  ["armv6"]="armhf"
-  ["armhf"]="armhf"
-  ["arm64"]="arm64"
-  ["amd64"]="amd64"
-)
-
-# Validate architecture
-if [[ -z "${PLATFORM_MAP[$ARCH]}" ]]; then
+if [[ -z "${ARCH_FLAGS[$ARCH]}" ]]; then
   echo "Error: Unknown architecture: $ARCH"
-  echo "Supported: armv6, armhf, arm64, amd64"
+  echo "Available architectures: ${!ARCH_FLAGS[@]}"
   exit 1
 fi
 
-PLATFORM="${PLATFORM_MAP[$ARCH]}"
-LIB_PATH="${LIB_PATH_MAP[$ARCH]}"
-DEB_ARCH="${DEB_ARCH_MAP[$ARCH]}"
-DOCKERFILE="docker/Dockerfile.lgpio.$ARCH"
-IMAGE_NAME="lgpio-builder:$ARCH"
-OUTPUT_DIR="out/$ARCH"
+PLATFORM="${ARCH_FLAGS[$ARCH]}"
 
-if [ ! -f "$DOCKERFILE" ]; then
-  echo "Error: Dockerfile not found: $DOCKERFILE"
+if [[ ! -f "$DOCKERFILE" ]]; then
+  echo "Missing Dockerfile for architecture: $ARCH"
   exit 1
 fi
 
-# Check source tarball
-if [ ! -f "package-sources/lg-0.2.2.tar.gz" ]; then
-  echo "Error: Source tarball not found: package-sources/lg-0.2.2.tar.gz"
-  echo ""
-  echo "Download it first:"
-  echo "  cd package-sources"
-  echo "  wget https://github.com/joan2937/lg/archive/refs/tags/v0.2.2.tar.gz -O lg-0.2.2.tar.gz"
-  exit 1
-fi
-
-echo "========================================"
-echo "Building lgpio for $ARCH"
-echo "========================================"
-echo "  Platform: $PLATFORM"
-echo "  Lib Path: $LIB_PATH"
-echo "  DEB Arch: $DEB_ARCH"
-echo "  Dockerfile: $DOCKERFILE"
-echo "  Image: $IMAGE_NAME"
-echo "  Output: $OUTPUT_DIR"
-echo ""
-
-# Build Docker image with platform flag
-echo "[+] Building Docker image..."
+echo "[+] Building Docker image for $ARCH ($PLATFORM)..."
 if [[ "$VERBOSE" -eq 1 ]]; then
-  DOCKER_BUILDKIT=1 docker build --platform=$PLATFORM --progress=plain -t "$IMAGE_NAME" -f "$DOCKERFILE" .
+  DOCKER_BUILDKIT=1 docker build --platform=$PLATFORM --progress=plain -t $IMAGE_TAG -f $DOCKERFILE .
 else
-  docker build --platform=$PLATFORM --progress=auto -t "$IMAGE_NAME" -f "$DOCKERFILE" . > /dev/null 2>&1
+  docker build --platform=$PLATFORM --progress=auto -t $IMAGE_TAG -f $DOCKERFILE .
 fi
-echo "[+] Docker image built: $IMAGE_NAME"
-echo ""
 
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
-
-# Special CFLAGS for ARM architectures
-EXTRA_CFLAGS=""
+echo "[+] Running build for $COMPONENT in Docker ($ARCH)..."
 if [[ "$ARCH" == "armv6" ]]; then
-  EXTRA_CFLAGS="-march=armv6 -mfpu=vfp -mfloat-abi=hard -marm"
-elif [[ "$ARCH" == "armhf" ]]; then
-  EXTRA_CFLAGS="-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard"
-elif [[ "$ARCH" == "arm64" ]]; then
-  EXTRA_CFLAGS="-march=armv8-a"
-fi
-
-# Run build inside container
-echo "[+] Running build inside container..."
-if [[ "$VERBOSE" -eq 1 ]]; then
-  docker run --rm --platform=$PLATFORM \
-    -v "$(pwd)/package-sources:/build/package-sources:ro" \
-    -v "$(pwd)/scripts:/build/scripts:ro" \
-    -v "$(pwd)/$OUTPUT_DIR:/build/output" \
-    -e "ARCH=$ARCH" \
-    -e "LIB_PATH=$LIB_PATH" \
-    -e "DEB_ARCH=$DEB_ARCH" \
-    -e "EXTRA_CFLAGS=$EXTRA_CFLAGS" \
-    "$IMAGE_NAME" \
-    bash /build/scripts/build-lgpio.sh
+  docker run --rm --platform=$PLATFORM -v "$PWD":/build -w /build $IMAGE_TAG bash -c "\
+    cd build/$COMPONENT/source && \
+    export CFLAGS='-O2 -march=armv6 -mfpu=vfp -mfloat-abi=hard -marm' && \
+    export CXXFLAGS='-O1 -Wno-psabi -march=armv6 -mfpu=vfp -mfloat-abi=hard -marm' && \
+    export DEB_BUILD_MAINT_OPTIONS='hardening=+all optimize=-lto' && \
+    dpkg-buildpackage -us -uc -b"
 else
-  docker run --rm --platform=$PLATFORM \
-    -v "$(pwd)/package-sources:/build/package-sources:ro" \
-    -v "$(pwd)/scripts:/build/scripts:ro" \
-    -v "$(pwd)/$OUTPUT_DIR:/build/output" \
-    -e "ARCH=$ARCH" \
-    -e "LIB_PATH=$LIB_PATH" \
-    -e "DEB_ARCH=$DEB_ARCH" \
-    -e "EXTRA_CFLAGS=$EXTRA_CFLAGS" \
-    "$IMAGE_NAME" \
-    bash /build/scripts/build-lgpio.sh 2>&1 | grep -E "^\[|^Error|^Building|warning:"
+  docker run --rm --platform=$PLATFORM -v "$PWD":/build -w /build $IMAGE_TAG bash -c "\
+    cd build/$COMPONENT/source && \
+    export CXXFLAGS='-O1 -Wno-psabi' && \
+    export DEB_BUILD_MAINT_OPTIONS='hardening=+all optimize=-lto' && \
+    dpkg-buildpackage -us -uc -b"
 fi
 
-echo ""
-echo "[+] Build complete for $ARCH"
-echo "[+] DEBs in: $OUTPUT_DIR"
-ls -lh "$OUTPUT_DIR"/*.deb 2>/dev/null || echo "(no DEBs found)"
+mkdir -p out/$ARCH
+find build/$COMPONENT -maxdepth 1 -type f -name '*.deb' -exec mv {} out/$ARCH/ \;
+
+if [[ "$MODE" == "volumio" ]]; then
+  echo "[+] Volumio mode: Renaming .deb packages for custom suffixes..."
+  for f in out/$ARCH/*.deb; do
+    if [[ "$f" == *_all.deb ]]; then
+      echo "[VERBOSE] Skipping _all.deb file: $f"
+      continue
+    fi
+
+    base_name=$(basename "$f")
+    newf="$f"
+
+    case "$ARCH" in
+      armv6)
+        newf="${f/_armhf.deb/_arm.deb}"
+        if [[ "$f" != "$newf" ]]; then
+          echo "[VERBOSE] Renaming $f to $newf (ARMv6/7 target VFP2 - hard-float)"
+        fi
+        ;;
+      armhf)
+        newf="${f/_armhf.deb/_armv7.deb}"
+        if [[ "$f" != "$newf" ]]; then
+          echo "[VERBOSE] Renaming $f to $newf (ARMv7 target)"
+        fi
+        ;;
+      arm64)
+        newf="${f/_arm64.deb/_armv8.deb}"
+        if [[ "$f" != "$newf" ]]; then
+          echo "[VERBOSE] Renaming $f to $newf (ARMv8 target - 64-bit)"
+        fi
+        ;;
+      amd64)
+        newf="${f/_amd64.deb/_x64.deb}"
+        if [[ "$f" != "$newf" ]]; then
+          echo "[VERBOSE] Renaming $f to $newf (x86_64 target)"
+        fi
+        ;;
+      *)
+        newf="$f"
+        ;;
+    esac
+
+    if [[ "$f" != "$newf" ]]; then
+      mv "$f" "$newf"
+    fi
+  done
+fi
+
+echo "[OK] Build complete. Packages are in out/$ARCH/"

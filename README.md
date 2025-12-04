@@ -1,116 +1,65 @@
 # lgpio-builds
 
-Docker-based cross-compilation build system for lgpio (lg) library.
-
-Produces Debian packages containing static library and headers for use in
-dependent projects (e.g., allo-relay-builds).
+Docker-based build system for lgpio library DEBs targeting Volumio 4.x (Bookworm).
 
 ## Overview
 
-lgpio is a C library for Linux Single Board Computers which allows control
-of GPIO, I2C, SPI, and serial interfaces. It is the recommended replacement
-for WiringPi on Raspberry Pi OS Bookworm and later.
+Builds the lg library (lgpio) as static library DEBs for use as a build dependency.
+Follows Volumio multistrap architecture naming conventions.
 
-- **Source**: https://github.com/joan2937/lg
-- **Author**: joan2937
-- **Version**: 0.2.2
+## Output Packages
 
-## Output
+- libfn-lgpio0 - Static library
+- libfn-lgpio-dev - Development files (headers, pkg-config)
 
-Builds produce Debian packages for each architecture:
+## Prerequisites
 
-| Architecture | Platform | Packages |
-|--------------|----------|----------|
-| armv6 | Pi Zero/1 | libfn-lgpio, libfn-lgpio-dev |
-| armhf | Pi 2/3 | libfn-lgpio, libfn-lgpio-dev |
-| arm64 | Pi 4/5 | libfn-lgpio, libfn-lgpio-dev |
-| amd64 | x86_64 | libfn-lgpio, libfn-lgpio-dev |
+1. Docker with buildx and QEMU for cross-compilation
+2. Download lg source tarball
 
-Package contents:
-- `libfn-lgpio`: Static library (`/usr/lib/<triplet>/libfn-lgpio.a`)
-- `libfn-lgpio-dev`: Headers and pkg-config (`/usr/include/lgpio.h`, `/usr/lib/<triplet>/pkgconfig/libfn-lgpio.pc`)
-
-## Requirements
-
-- Docker with multi-architecture support (buildx)
-- QEMU for cross-architecture emulation
-
-Setup on Debian/Ubuntu:
-```bash
-sudo apt-get install docker.io qemu-user-static binfmt-support
-sudo systemctl enable --now docker
-```
-
-## Source Setup
-
-Download the lgpio source tarball before building:
+## Setup
 
 ```bash
 cd package-sources
 wget https://github.com/joan2937/lg/archive/refs/tags/v0.2.2.tar.gz -O lg-0.2.2.tar.gz
 ```
 
-Verify SHA256:
-```bash
-sha256sum lg-0.2.2.tar.gz
-```
+## Build Commands
 
-## Building
-
-Build all architectures:
+Build all architectures for Volumio:
 ```bash
-./build-matrix.sh
+./build-matrix.sh --volumio
 ```
 
 Build single architecture:
 ```bash
-./docker/run-docker-lgpio.sh arm64
-./docker/run-docker-lgpio.sh armhf --verbose
+./scripts/extract.sh
+./docker/run-docker-lgpio.sh lgpio arm64 volumio --verbose
 ```
 
-## Output Structure
+## Output Files
 
+With --volumio flag:
 ```
-out/
-  armv6/
-    libfn-lgpio_0.2.2-1_armhf.deb
-    libfn-lgpio-dev_0.2.2-1_armhf.deb
-  armhf/
-    libfn-lgpio_0.2.2-1_armhf.deb
-    libfn-lgpio-dev_0.2.2-1_armhf.deb
-  arm64/
-    libfn-lgpio_0.2.2-1_arm64.deb
-    libfn-lgpio-dev_0.2.2-1_arm64.deb
-  amd64/
-    libfn-lgpio_0.2.2-1_amd64.deb
-    libfn-lgpio-dev_0.2.2-1_amd64.deb
+out/armv6/libfn-lgpio0_0.2.2-1_arm.deb
+out/armv6/libfn-lgpio-dev_0.2.2-1_arm.deb
+out/armhf/libfn-lgpio0_0.2.2-1_armv7.deb
+out/armhf/libfn-lgpio-dev_0.2.2-1_armv7.deb
+out/arm64/libfn-lgpio0_0.2.2-1_armv8.deb
+out/arm64/libfn-lgpio-dev_0.2.2-1_armv8.deb
+out/amd64/libfn-lgpio0_0.2.2-1_x64.deb
+out/amd64/libfn-lgpio-dev_0.2.2-1_x64.deb
 ```
 
-## Usage in Dependent Projects
+## Architecture Mapping
 
-Install DEBs in Docker container:
-```bash
-dpkg -i /debs/*.deb
-```
-
-Link against static library:
-```bash
-gcc -o myapp myapp.c $(pkg-config --cflags --libs libfn-lgpio)
-```
-
-Or manually:
-```bash
-gcc -o myapp myapp.c -I/usr/include -L/usr/lib/<triplet> -lfn-lgpio
-```
-
-## Cleaning
-
-Remove all build artifacts:
-```bash
-./clean-all.sh
-```
+| Build Arch | Docker Platform | Volumio Suffix |
+|------------|-----------------|----------------|
+| armv6      | linux/arm/v7    | _arm.deb       |
+| armhf      | linux/arm/v7    | _armv7.deb     |
+| arm64      | linux/arm64     | _armv8.deb     |
+| amd64      | linux/amd64     | _x64.deb       |
 
 ## License
 
-Build scripts: MIT License
-lgpio library: Public Domain (joan2937)
+MIT License. lgpio is public domain.

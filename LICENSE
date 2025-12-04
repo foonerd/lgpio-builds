@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2024 Volumio
+Copyright (c) 2024 fooNerd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,5 +22,5 @@ SOFTWARE.
 
 ---
 
-lgpio library (lg) is released into the public domain by joan2937.
-See: https://github.com/joan2937/lg
+lgpio (lg library) by joan2937 is in the public domain.
+Source: https://github.com/joan2937/lg
